@@ -1,0 +1,523 @@
+substitutions:
+  name: daly-bms-ble
+  device_description: "Monitor a DALY Battery Management System via BLE"
+  external_components_source: github://syssi/esphome-daly-bms@main
+  mac_address: "41:18:11:01:0B:C2"
+
+esphome:
+  name: ${name}
+  comment: ${device_description}
+  min_version: 2024.6.0
+  project:
+    name: "syssi.esphome-daly-bms"
+    version: 1.0.0
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# **Konfigurasi UART (TX/RX) untuk komunikasi antar ESP**
+uart:
+  id: uart_bus
+  tx_pin: GPIO17  # Sesuaikan dengan TX ESP32
+  rx_pin: GPIO16  # Sesuaikan dengan RX ESP32
+  baud_rate: 9600
+
+external_components:
+  - source: ${external_components_source}
+    refresh: 0s
+
+wifi:
+  ssid: "kostheheng"
+  password: "semangat"
+
+ota:
+  platform: esphome
+
+logger:
+  level: DEBUG
+
+mqtt:
+  broker: 192.168.191.248
+  username: mqtt
+  password: mqtt
+  id: ESP_Data
+
+  on_message:
+    topic: iot/data2
+    then:
+      - lambda: |-
+          json::parse_json(x, [](JsonObject root) -> bool {
+            if (root.containsKey("jam")) {
+              id(jam) = root["jam"].as<int>();
+            }
+            if (root.containsKey("menit")) {
+              id(menit) = root["menit"].as<int>();
+            }
+            if (root.containsKey("detik")) {
+              id(detik) = root["detik"].as<int>();
+            }
+
+            ESP_LOGI("MQTT", "Waktu diterima: %02d:%02d:%02d", id(jam), id(menit), id(detik));
+
+            return true;  // Tambahkan ini agar cocok dengan tipe json_parse_t
+          });
+  
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+ble_client:
+  - mac_address: ${mac_address}
+    id: client0
+
+daly_bms_ble:
+  - ble_client_id: client0
+    id: bms0
+    password: 12345678
+    update_interval: 10s
+
+# **Simpan Variabel untuk Data Sensor**
+globals:
+  - id: PZEMVoltagePanel
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PZEMCurrentPanel
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PZEMPowerPanel
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PZEMEnergyPanel
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  - id: PZEMVoltageBattery
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PZEMCurrentBattery
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PZEMPowerBattery
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PZEMEnergyBattery
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  - id: SOCo
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  - id: PLTSVoltage
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PLTSCurrent
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PLTSPower
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PLTSEnergy
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PLTSHz
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: PLTSPf
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  - id: GridVoltage
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: GridCurrent
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: GridPower
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: GridEnergy
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: GridHz
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: GridPf
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  - id: INA219Voltage
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: INA219Current
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: ShuntVoltage
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+
+  - id: jam
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: menit
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: detik
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: waktu_manual_jalan
+    type: bool
+    initial_value: 'false'
+
+binary_sensor:
+  - platform: daly_bms_ble
+    daly_bms_ble_id: bms0
+    balancing:
+      name: "${name} balancing"
+    charging:
+      name: "${name} charging"
+    discharging:
+      name: "${name} discharging"
+
+button:
+  - platform: daly_bms_ble
+    # Retrieves the BMS settings and prints them in the ESPHome logs
+    retrieve_settings:
+      name: "${name} retrieve settings"
+    # Restarts the BMS
+    restart:
+      name: "${name} restart"
+    # Shuts down the BMS
+    shutdown:
+      name: "${name} shutdown"
+    # Resets the BMS to the factory settings
+    factory_reset:
+      name: "${name} factory reset"
+    # Resets the BMS current to zero
+    reset_current:
+      name: "${name} reset current"
+
+http_request:
+  useragent: esphome/1.0
+  timeout: 5s
+
+sensor:
+  - platform: daly_bms_ble
+    daly_bms_ble_id: bms0
+    error_bitmask:
+      name: "${name} error bitmask"
+    total_voltage:
+      name: "${name} total voltage"
+      id: total_voltage
+    current:
+      name: "${name} current"
+      id: total_current
+    power:
+      name: "${name} power"
+      id: Power
+    charging_power:
+      name: "${name} charging power"
+    discharging_power:
+      name: "${name} discharging power"
+    state_of_charge:
+      name: "${name} state of charge"
+      id: soc
+    charging_cycles:
+      name: "${name} charging cycles"
+    min_cell_voltage:
+      name: "${name} min cell voltage"
+    max_cell_voltage:
+      name: "${name} max cell voltage"
+    min_voltage_cell:
+      name: "${name} min voltage cell"
+    max_voltage_cell:
+      name: "${name} max voltage cell"
+    delta_cell_voltage:
+      name: "${name} delta cell voltage"
+    average_cell_voltage:
+      name: "${name} average cell voltage"
+    temperature_1:
+      name: "${name} temperature 1"
+      id: temp1
+    temperature_2:
+      name: "${name} temperature 2"
+      id: temp2
+    cell_voltage_1:
+      name: "${name} cell voltage 1"
+      id: v1
+    cell_voltage_2:
+      name: "${name} cell voltage 2"
+      id: v2
+    cell_voltage_3:
+      name: "${name} cell voltage 3"
+      id: v3
+    cell_voltage_4:
+      name: "${name} cell voltage 4"
+      id: v4
+    cell_count:
+      name: "${name} cell count"
+    temperature_sensors:
+      name: "${name} temperature sensors"
+    capacity_remaining:
+      name: "${name} capacity remaining"
+
+text_sensor:
+  - platform: daly_bms_ble
+    daly_bms_ble_id: bms0
+    battery_status:
+      name: "${name} battery status"
+    errors:
+      name: "${name} errors"
+
+switch:
+  - platform: daly_bms_ble
+    balancer:
+      name: "${name} balancer"
+    charging:
+      name: "${name} charging"
+    discharging:
+      name: "${name} discharging"
+
+  - platform: ble_client
+    ble_client_id: client0
+    id: ble_client_switch0
+    name: "${name} enable bluetooth connection"
+
+# **Membaca Data dari UART & Mengirim Data Kembali ke ESP 1**
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          std::string data;
+          while (id(uart_bus).available()) {
+            uint8_t c;
+            id(uart_bus).read_byte(&c);
+            if (c == '\n') break;
+            data += static_cast<char>(c);
+          }
+
+          if (data.length() > 0) {
+            ESP_LOGD("UART", "Received: %s", data.c_str());
+
+            std::vector<std::string> values;
+            size_t pos = 0;
+            while ((pos = data.find(',')) != std::string::npos) {
+              values.push_back(data.substr(0, pos));
+              data.erase(0, pos + 1);
+            }
+            values.push_back(data);
+            if (values.size() == 24) {  // Pastikan jumlah data 24 variabel
+            id(PZEMVoltagePanel)   = std::stof(values[0]);
+            id(PZEMCurrentPanel)   = std::stof(values[1]);
+            id(PZEMPowerPanel)     = std::stof(values[2]);
+            id(PZEMEnergyPanel)    = std::stof(values[3]);
+            
+            id(PZEMVoltageBattery) = std::stof(values[4]);
+            id(PZEMCurrentBattery) = std::stof(values[5]);
+            id(PZEMPowerBattery)   = std::stof(values[6]);
+            id(PZEMEnergyBattery)  = std::stof(values[7]);
+            
+            id(SOCo)               = std::stof(values[8]);
+            
+            id(PLTSVoltage)        = std::stof(values[9]);
+            id(PLTSCurrent)        = std::stof(values[10]);
+            id(PLTSPower)          = std::stof(values[11]);
+            id(PLTSEnergy)         = std::stof(values[12]);
+            id(PLTSHz)             = std::stof(values[13]);
+            id(PLTSPf)             = std::stof(values[14]);
+            
+            id(GridVoltage)        = std::stof(values[15]);
+            id(GridCurrent)        = std::stof(values[16]);
+            id(GridPower)          = std::stof(values[17]);
+            id(GridEnergy)         = std::stof(values[18]);
+            id(GridHz)             = std::stof(values[19]);
+            id(GridPf)             = std::stof(values[20]);
+            
+            id(INA219Voltage)      = std::stof(values[21]);
+            id(INA219Current)      = std::stof(values[22]);
+            id(ShuntVoltage)       = std::stof(values[23]);
+            }
+          }
+
+          
+  - interval: 5s
+    then:
+    - lambda: |-
+        char message[150];
+          snprintf(message, sizeof(message), "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%02d,%02d,%02d\n",
+               id(total_voltage).state,
+               id(total_current).state,
+               id(Power).state,
+               id(temp1).state,
+               id(temp2).state,
+               id(v1).state,
+               id(v2).state,
+               id(v3).state,
+               id(v4).state,
+               id(soc).state,
+               id(jam),
+               id(menit),
+               id(detik));
+
+          ESP_LOGD("uart", "Sending: %s", message);
+          ESP_LOGD("time", "Current time: %02d:%02d:%02d", id(jam), id(menit), id(detik));
+          id(uart_bus).write_str(message);
+
+  - interval: 20s
+    then:
+      - lambda: |-
+          char jsonPayload1[512];
+          snprintf(jsonPayload1, sizeof(jsonPayload1),
+            "{\"Daya Baterai\":%.2f,\"SOC\":%.2f,\"Energi Baterai\":%.2f,"
+            "\"Daya PLTS\":%.2f,\"Energi PLTS\":%.2f,"
+            "\"Daya Grid\":%.2f,\"Energi Grid\":%.2f}",
+            id(PZEMPowerBattery), id(SOCo), id(PZEMEnergyBattery),
+            id(PLTSPower), id(PLTSEnergy), id(GridPower), id(GridEnergy));
+
+          ESP_LOGD("Terkirim Topik 1", "Publish to iot/data1 : %s", jsonPayload1);
+
+          id(ESP_Data).publish("iot/data1", jsonPayload1);
+          
+          char jsonPayload2[1024];
+          snprintf(jsonPayload2, sizeof(jsonPayload2),
+            "{\"PZEMVoltagePanel\":%.2f,"
+            "\"PZEMCurrentPanel\":%.2f,"
+            "\"PZEMPowerPanel\":%.2f,"
+            "\"PZEMEnergyPanel\":%.2f,"
+            
+            "\"PZEMVoltageBattery\":%.2f,"
+            "\"PZEMCurrentBattery\":%.2f,"
+            "\"PZEMPowerBattery\":%.2f,"
+            "\"PZEMEnergyBattery\":%.2f,"
+            
+            "\"SOCo\":%.2f,"
+            
+            "\"PLTSVoltage\":%.2f,"
+            "\"PLTSCurrent\":%.2f,"
+            "\"PLTSPower\":%.2f,"
+            "\"PLTSEnergy\":%.2f,"
+            "\"PLTSHz\":%.2f,"
+            "\"PLTSPf\":%.2f,"
+            
+            "\"GridVoltage\":%.2f,"
+            "\"GridCurrent\":%.2f,"
+            "\"GridPower\":%.2f,"
+            "\"GridEnergy\":%.2f,"
+            "\"GridHz\":%.2f,"
+            "\"GridPf\":%.2f,"
+            
+            "\"INA219Voltage\":%.2f,"
+            "\"INA219Current\":%.2f,"
+            
+            "\"temp1\":%.2f"
+            "}",
+
+            id(PZEMVoltagePanel),
+            id(PZEMCurrentPanel),
+            id(PZEMPowerPanel),
+            id(PZEMEnergyPanel),
+
+            id(PZEMVoltageBattery),
+            id(PZEMCurrentBattery),
+            id(PZEMPowerBattery),
+            id(PZEMEnergyBattery),
+
+            id(SOCo),
+
+            id(PLTSVoltage),
+            id(PLTSCurrent),
+            id(PLTSPower),
+            id(PLTSEnergy),
+            id(PLTSHz),
+            id(PLTSPf),
+
+            id(GridVoltage),
+            id(GridCurrent),
+            id(GridPower),
+            id(GridEnergy),
+            id(GridHz),
+            id(GridPf),
+
+            id(INA219Voltage),
+            id(INA219Current),
+
+            id(temp1).state
+          );
+ 
+          ESP_LOGD("Terkirim Topik 2", "Publish to iot/data3 : %s", jsonPayload2);
+
+          id(ESP_Data).publish("iot/data3", jsonPayload2);
+
+
+# **Konfigurasi I2C unt uk LCD**
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+
+# **Menampilkan Data ke LCD 20x4**
+display:
+  - platform: lcd_pcf8574
+    dimensions: 20x4
+    address: 0x27
+    update_interval: 3s
+    lambda: |-
+      static int screen = 0;  
+      screen = (screen + 1) % 4; // Ganti layar setiap 2 detik
+
+      if (screen == 0) {  // Tampilan 1: Data Panel
+        it.printf(0, 0, "Panel Data:");
+        it.printf(0, 1, "V: %.2fV", id(PZEMVoltagePanel));
+        it.printf(0, 2, "I: %.2fA", id(PZEMCurrentPanel));
+        it.printf(0, 3, "P: %.2fW", id(PZEMPowerPanel));
+      } 
+      else if (screen == 1) {  // Tampilan 2: Data Baterai
+        it.printf(0, 0, "Battery Data:");
+        it.printf(0, 1, "V: %.2fV", id(PZEMVoltageBattery));
+        it.printf(0, 2, "I: %.2fA", id(PZEMCurrentBattery));
+        it.printf(0, 3, "P: %.2fW", id(PZEMPowerBattery));
+      } 
+      else if (screen == 2) {  // Tampilan 3: Data INA219
+        it.printf(0, 0, "INA219 Data:");
+        it.printf(0, 1, "V: %.2fV", id(INA219Voltage));
+        it.printf(0, 2, "I: %.2fA", id(INA219Current));
+        it.printf(0, 3, "Power Mode");
+      } 
+      else if (screen == 3) {  // Tampilan 4: SOC
+        it.printf(0, 0, "Time: %02d:%02d:%02d", id(jam), id(menit), id(detik));
+        it.printf(0, 1, "SoC: %.1f %%", id(soc).state);
+        it.printf(0, 2, "Monitoring PLTS");
+        it.printf(0, 3, "M.Farhan/I0721048");
+      }
+
+web_server:
+  port: 80
